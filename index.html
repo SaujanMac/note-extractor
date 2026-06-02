@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>IMS Phi-3 POC</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+    }
+
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      width: 420px;
+      margin-bottom: 10px;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    pre {
+      margin-top: 20px;
+      background: #111;
+      color: #0f0;
+      padding: 15px;
+      border-radius: 8px;
+      min-height: 100px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>IMS Extraction (Phi-3 Mini)</h2>
+
+  <input id="input" placeholder="Enter sticky note text..." value="5kg rice from Ram Dai credit" />
+  <br />
+  <button onclick="run()">Extract</button>
+
+  <pre id="output">Waiting...</pre>
+
+  <script>
+    async function run() {
+      const text = document.getElementById("input").value;
+      const output = document.getElementById("output");
+
+      output.innerText = "Processing...";
+
+      // ✅ CLEAN PROMPT (NO <|assistant|>)
+      const prompt = `<|system|>
+You are an IMS extraction engine.
+
+Return ONLY ONE valid JSON object.
+
+Rules:
+- No explanation
+- No extra text
+- No continuation
+- Output must be strictly JSON
+
+Schema:
+{
+  "item": string|null,
+  "quantity": number|null,
+  "unit": string|null,
+  "customer": string|null,
+  "type": "credit"|"cash"|null
+}
+
+Input:
+${text}
+`;
+
+      try {
+        const res = await fetch("http://127.0.0.1:8080/completion", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            prompt,
+            temperature: 0.0,
+            top_p: 0.3,
+            n_predict: 80,
+            stop: ["Input:", "\n\n"]
+          })
+        });
+
+        const data = await res.json();
+
+        // 🔥 extract model output only
+        const content = data.content || "";
+
+        let parsed;
+
+        try {
+          parsed = JSON.parse(content);
+        } catch (e) {
+          // fallback safety (in case extra text appears)
+          const match = content.match(/\{[\s\S]*\}/);
+          parsed = match ? JSON.parse(match[0]) : { raw: content };
+        }
+
+        output.innerText = JSON.stringify(parsed, null, 2);
+
+      } catch (err) {
+        output.innerText = "Error: " + err.message;
+      }
+    }
+  </script>
+
+</body>
+</html>
